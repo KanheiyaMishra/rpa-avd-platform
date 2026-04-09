@@ -1,0 +1,120 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#",
+  "contentVersion": "1.0.0.0",
+  "metadata": {
+    "description": "Session host deployment parameters for AVD platform (dev environment)",
+    "environment": "dev",
+    "region": "eastus2",
+    "lastUpdated": "2026-04-10"
+  },
+  "parameters": {
+    "location": {
+      "value": "eastus2",
+      "metadata": {
+        "description": "Azure region for session host VMs"
+      }
+    },
+    "spokeResourceGroup": {
+      "value": "rg-avd-spoke-demo",
+      "metadata": {
+        "description": "Spoke RG where session host VMs reside"
+      }
+    },
+    "hubResourceGroup": {
+      "value": "rg-avd-hub-hp-demo",
+      "metadata": {
+        "description": "Hub RG where gallery and host pool exist"
+      }
+    },
+    "hostPoolName": {
+      "value": "hp-demo",
+      "metadata": {
+        "description": "Target AVD host pool for registration"
+      }
+    },
+    "galleryName": {
+      "value": "acg_avd_dev",
+      "metadata": {
+        "description": "Compute gallery name (source of golden image)"
+      }
+    },
+    "imageDefinitionName": {
+      "value": "img-def-demo",
+      "metadata": {
+        "description": "Image definition to deploy from"
+      }
+    },
+    "imageVersion": {
+      "value": "latest",
+      "metadata": {
+        "description": "Image version: 'latest' (newest) or specific semver (1.0.0, 1.0.1, etc.)"
+      }
+    },
+    "vmNamePrefix": {
+      "value": "avd-demo",
+      "metadata": {
+        "description": "Prefix for VM names (suffixed with numeric index: avd-demo-01, avd-demo-02, etc.)"
+      }
+    },
+    "vmSize": {
+      "value": "Standard_D4s_v5",
+      "metadata": {
+        "description": "Session host VM size (4 vCPU, 16 GB RAM suitable for demo/light RPA)"
+      }
+    },
+    "vmCount": {
+      "value": 3,
+      "metadata": {
+        "description": "Number of VMs to deploy (1-20, recommend 2-5 for dev testing)"
+      }
+    },
+    "subnetId": {
+      "value": "",
+      "metadata": {
+        "description": "Subnet ID where VMs connect (from GitHub Env Var: SUBNET_ID)"
+      }
+    },
+    "adminUsername": {
+      "value": "azureadmin",
+      "metadata": {
+        "description": "Local admin username for VMs"
+      }
+    },
+    "adminPassword": {
+      "value": "",
+      "metadata": {
+        "description": "Local admin password (from GitHub Secrets: AVD_VM_ADMIN_PASSWORD)"
+      }
+    },
+    "imageSource": {
+      "value": "gallery",
+      "metadata": {
+        "description": "Image source: 'gallery' (golden image) or 'marketplace' (stock Windows 11)"
+      }
+    },
+    "registrationTokenValidityHours": {
+      "value": 4,
+      "metadata": {
+        "description": "Registration token validity in hours (fresh token generated per deployment)"
+      }
+    },
+    "osDiskSizeGB": {
+      "value": 128,
+      "metadata": {
+        "description": "OS disk size (128 GB sufficient for OS + software + user data)"
+      }
+    },
+    "vmTags": {
+      "value": {
+        "environment": "dev",
+        "project": "avd-platform",
+        "role": "session-host",
+        "imageVersion": "latest",
+        "managedBy": "github-actions"
+      },
+      "metadata": {
+        "description": "Tags for session host VMs (for cost tracking, automation, identification)"
+      }
+    }
+  }
+}

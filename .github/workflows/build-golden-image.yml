@@ -1,0 +1,128 @@
+# ============================================================
+# ADMIN WORKFLOW — Build Demo Golden Image via Packer (HCL)
+#
+# Who runs this: Platform admins only
+# When: After software list changes or on a scheduled cadence
+#
+# What it does:
+#   1. Installs Packer on runner
+#   2. Validates Packer HCL template
+#   3. Builds Azure image and publishes to Azure Compute Gallery
+#
+# Required GitHub Secrets:
+#   AZURE_CLIENT_ID, AZURE_TENANT_ID, AZURE_SUBSCRIPTION_ID
+#   PACKER_BUILD_VM_PASSWORD    - Temporary password used by packer WinRM
+#
+# Required GitHub Environment variables:
+#   LOCATION, HUB_RG_NAME, GALLERY_NAME
+# ============================================================
+
+name: 🖼️ Build Demo Golden Image (Packer)
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Target environment'
+        required: true
+        default: 'dev'
+        type: choice
+        options:
+          - dev
+          - prod
+
+      image_version:
+        description: 'Image version (semver e.g. 1.0.0)'
+        required: true
+        default: '1.0.0'
+        type: string
+
+  # Optional: rebuild image every Sunday at 2am (keep image patched)
+  schedule:
+    - cron: '0 2 * * 0'
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  build-image:
+    name: Build Demo Image via Packer
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment || 'dev' }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Azure Login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      # Validate version format (semver X.Y.Z)
+      - name: Validate image version format
+        run: |
+          VERSION="${{ inputs.image_version || '1.0.0' }}"
+          if ! echo "$VERSION" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "❌ image_version must be semver format X.Y.Z (e.g. 1.0.0). Got: $VERSION"
+            exit 1
+          fi
+          echo "✅ Version format valid: $VERSION"
+
+      - name: Install Packer
+        run: |
+          PACKER_VERSION="1.11.2"
+          curl -fsSL "https://releases.hashicorp.com/packer/${PACKER_VERSION}/packer_${PACKER_VERSION}_linux_amd64.zip" -o packer.zip
+          unzip -o packer.zip
+          sudo mv packer /usr/local/bin/packer
+          packer version
+
+      - name: Packer Init
+        run: |
+          cd packer
+          packer init demo-image.pkr.hcl
+
+      - name: Packer Validate
+        env:
+          PKR_VAR_subscription_id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          PKR_VAR_tenant_id: ${{ secrets.AZURE_TENANT_ID }}
+          PKR_VAR_client_id: ${{ secrets.AZURE_CLIENT_ID }}
+          PKR_VAR_location: ${{ vars.LOCATION }}
+          PKR_VAR_hub_resource_group: ${{ vars.HUB_RG_NAME }}
+          PKR_VAR_gallery_name: ${{ vars.GALLERY_NAME }}
+          PKR_VAR_image_definition_name: img-def-demo
+          PKR_VAR_image_version: ${{ inputs.image_version || '1.0.0' }}
+          PKR_VAR_build_vm_admin_username: packeradmin
+          PKR_VAR_build_vm_admin_password: ${{ secrets.PACKER_BUILD_VM_PASSWORD }}
+        run: |
+          cd packer
+          packer validate demo-image.pkr.hcl
+
+      - name: Packer Build
+        env:
+          PKR_VAR_subscription_id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          PKR_VAR_tenant_id: ${{ secrets.AZURE_TENANT_ID }}
+          PKR_VAR_client_id: ${{ secrets.AZURE_CLIENT_ID }}
+          PKR_VAR_location: ${{ vars.LOCATION }}
+          PKR_VAR_hub_resource_group: ${{ vars.HUB_RG_NAME }}
+          PKR_VAR_gallery_name: ${{ vars.GALLERY_NAME }}
+          PKR_VAR_image_definition_name: img-def-demo
+          PKR_VAR_image_version: ${{ inputs.image_version || '1.0.0' }}
+          PKR_VAR_build_vm_admin_username: packeradmin
+          PKR_VAR_build_vm_admin_password: ${{ secrets.PACKER_BUILD_VM_PASSWORD }}
+        run: |
+          cd packer
+          packer build demo-image.pkr.hcl
+
+      - name: Build Summary
+        run: |
+          echo "## 🖼️ Golden Image Build Complete" >> $GITHUB_STEP_SUMMARY
+          echo "| Property | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|---|---|" >> $GITHUB_STEP_SUMMARY
+          echo "| Image Type | img-def-demo |" >> $GITHUB_STEP_SUMMARY
+          echo "| Version | ${{ inputs.image_version || '1.0.0' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Gallery | ${{ vars.GALLERY_NAME }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Environment | ${{ inputs.environment || 'dev' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Built At | $(date -u) |" >> $GITHUB_STEP_SUMMARY

@@ -1,0 +1,116 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#",
+  "contentVersion": "1.0.0.0",
+  "metadata": {
+    "description": "Packer image build parameters for AVD platform (dev environment)",
+    "environment": "dev",
+    "region": "eastus2",
+    "lastUpdated": "2026-04-10"
+  },
+  "parameters": {
+    "subscriptionId": {
+      "value": "",
+      "metadata": {
+        "description": "Azure subscription ID (from GitHub Secrets: AZURE_SUBSCRIPTION_ID)"
+      }
+    },
+    "tenantId": {
+      "value": "",
+      "metadata": {
+        "description": "Azure AD tenant ID (from GitHub Secrets: AZURE_TENANT_ID)"
+      }
+    },
+    "clientId": {
+      "value": "",
+      "metadata": {
+        "description": "Service principal client ID (from GitHub Secrets: AZURE_CLIENT_ID)"
+      }
+    },
+    "location": {
+      "value": "eastus2",
+      "metadata": {
+        "description": "Azure region for build VM"
+      }
+    },
+    "hubResourceGroup": {
+      "value": "rg-avd-hub-hp-demo",
+      "metadata": {
+        "description": "Hub RG name where gallery resides"
+      }
+    },
+    "galleryName": {
+      "value": "acg_avd_dev",
+      "metadata": {
+        "description": "Azure Compute Gallery name"
+      }
+    },
+    "imageDefinitionName": {
+      "value": "img-def-demo",
+      "metadata": {
+        "description": "Image definition name in gallery (single demo pool uses one definition)"
+      }
+    },
+    "imageVersion": {
+      "value": "1.0.0",
+      "metadata": {
+        "description": "Semantic version (X.Y.Z) for this image build"
+      }
+    },
+    "buildVmSize": {
+      "value": "Standard_D4s_v5",
+      "metadata": {
+        "description": "Temporary build VM size (D4s sufficient for software install + validation)"
+      }
+    },
+    "buildBaseImage": {
+      "value": "MicrosoftWindowsDesktop/windows-11/win11-25h2-avd",
+      "metadata": {
+        "description": "Base image publisher/offer/sku for Packer build"
+      }
+    },
+    "buildVmAdminUsername": {
+      "value": "packeradmin",
+      "metadata": {
+        "description": "Temporary admin username for build VM (WinRM access)"
+      }
+    },
+    "buildVmAdminPassword": {
+      "value": "",
+      "metadata": {
+        "description": "Temporary admin password for build VM (from GitHub Secrets: PACKER_BUILD_VM_PASSWORD)"
+      }
+    },
+    "softwareToInstall": {
+      "value": [
+        "Microsoft.Edge",
+        "Google.Chrome",
+        "Adobe.Acrobat.Reader.64-bit",
+        "7zip.7zip",
+        "Microsoft.SQLServerManagementStudio",
+        "Python.Python.3.12",
+        "WinSCP.WinSCP",
+        "Microsoft.VisualStudioCode"
+      ],
+      "metadata": {
+        "description": "Winget packages to install (Edge, Chrome, Office, OneDrive, UiPath, RSAT, VS Code, etc.)"
+      }
+    },
+    "imageDescription": {
+      "value": "Demo image: Edge, Chrome, Defender, O365, Adobe, 7-Zip, OneDrive, SQL Client, RDC, Python, UiPath, WinSCP, VSCode, Admin Tools",
+      "metadata": {
+        "description": "Gallery image definition description"
+      }
+    },
+    "buildTags": {
+      "value": {
+        "source": "packer",
+        "role": "avd-demo-image-build",
+        "environment": "dev",
+        "softwareSuite": "full-demo"
+      },
+      "metadata": {
+        "description": "Tags for temporary build resources"
+      }
+    }
+  }
+}

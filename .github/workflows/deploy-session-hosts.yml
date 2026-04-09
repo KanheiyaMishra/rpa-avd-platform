@@ -1,0 +1,266 @@
+# ============================================================
+# ADMIN + USER WORKFLOW — Deploy AVD Session Hosts (VMs)
+#
+# Who runs this: 
+#   - Admins: full control over all inputs
+#   - Users (self-service): limited inputs via GitHub Environment approval
+#
+# What it does:
+#   1. Generates a fresh AVD registration token (valid 4h)
+#   2. Deploys N VMs IN PARALLEL using a dynamic matrix
+#   3. Each VM is registered to the demo host pool automatically
+#
+# Required GitHub Secrets:
+#   AZURE_CLIENT_ID, AZURE_TENANT_ID, AZURE_SUBSCRIPTION_ID
+#   AVD_VM_ADMIN_PASSWORD  - VM local admin password (use Key Vault in prod)
+#
+# Required GitHub Environment variables:
+#   LOCATION, HOST_POOL_NAME, SPOKE_RG_NAME, GALLERY_NAME
+#   HUB_RG_NAME            - Hub resource group name
+#   AZURE_SUBSCRIPTION_ID  - Subscription (also as env var for az commands)
+# ============================================================
+
+name: 💻 Deploy Session Hosts
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Target environment'
+        required: true
+        default: 'dev'
+        type: choice
+        options:
+          - dev
+          - prod
+
+      vm_count:
+        description: 'Number of VMs to deploy (1–20)'
+        required: true
+        default: '1'
+        type: string
+
+      image_version:
+        description: 'Gallery image version or latest'
+        required: true
+        default: 'latest'
+        type: string
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  DEMO_VM_PREFIX: avd-demo
+
+jobs:
+  # ─────────────────────────────────────────────────────────
+  # JOB 1: Setup — generate dynamic matrix + registration token
+  # ─────────────────────────────────────────────────────────
+  setup:
+    name: Setup — Generate Matrix & Registration Token
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    outputs:
+      matrix: ${{ steps.build-matrix.outputs.matrix }}
+      registration_token: ${{ steps.get-token.outputs.token }}
+      hub_rg: ${{ steps.set-vars.outputs.hub_rg }}
+      host_pool_name: ${{ steps.set-vars.outputs.host_pool_name }}
+      image_id: ${{ steps.resolve-image.outputs.image_id }}
+      image_definition: ${{ steps.resolve-image.outputs.image_def }}
+      image_version: ${{ steps.resolve-image.outputs.image_version }}
+      last_existing_suffix: ${{ steps.resolve-last-suffix.outputs.value }}
+      effective_start_index: ${{ steps.build-matrix.outputs.start_index }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Azure Login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      # Validate vm_count is a number between 1 and 20
+      - name: Validate VM count
+        run: |
+          COUNT=${{ inputs.vm_count }}
+          if ! [[ "$COUNT" =~ ^[0-9]+$ ]] || [ "$COUNT" -lt 1 ] || [ "$COUNT" -gt 20 ]; then
+            echo "❌ vm_count must be a number between 1 and 20. Got: $COUNT"
+            exit 1
+          fi
+
+          echo "✅ VM count validated: $COUNT"
+
+      # Set derived variables
+      - name: Set derived variables
+        id: set-vars
+        run: |
+          HUB_RG="rg-avd-hub-${{ vars.HOST_POOL_NAME }}"
+          echo "hub_rg=$HUB_RG" >> $GITHUB_OUTPUT
+          
+          POOL="${{ vars.HOST_POOL_NAME }}"
+          echo "host_pool_name=$POOL" >> $GITHUB_OUTPUT
+
+      - name: Resolve image from gallery
+        id: resolve-image
+        run: |
+          HUB_RG='${{ steps.set-vars.outputs.hub_rg }}'
+          GALLERY='${{ vars.GALLERY_NAME }}'
+          IMAGE_DEF='img-def-demo'
+          IMAGE_VERSION_INPUT='${{ inputs.image_version }}'
+
+          if [ "$IMAGE_VERSION_INPUT" = "latest" ]; then
+            IMAGE_ID=$(az sig image-version list \
+              --resource-group "$HUB_RG" \
+              --gallery-name "$GALLERY" \
+              --gallery-image-definition "$IMAGE_DEF" \
+              --query "[-1].id" -o tsv 2>/dev/null || echo "")
+            RESOLVED_VERSION=$(az sig image-version list \
+              --resource-group "$HUB_RG" \
+              --gallery-name "$GALLERY" \
+              --gallery-image-definition "$IMAGE_DEF" \
+              --query "[-1].name" -o tsv 2>/dev/null || echo "")
+          else
+            IMAGE_ID=$(az sig image-version show \
+              --resource-group "$HUB_RG" \
+              --gallery-name "$GALLERY" \
+              --gallery-image-definition "$IMAGE_DEF" \
+              --gallery-image-version "$IMAGE_VERSION_INPUT" \
+              --query "id" -o tsv 2>/dev/null || echo "")
+            RESOLVED_VERSION="$IMAGE_VERSION_INPUT"
+          fi
+
+          if [ -z "$IMAGE_ID" ]; then
+            echo "❌ Gallery image not found. Definition: $IMAGE_DEF, Version: $IMAGE_VERSION_INPUT"
+            exit 1
+          fi
+
+          echo "image_id=$IMAGE_ID" >> $GITHUB_OUTPUT
+          echo "image_def=$IMAGE_DEF" >> $GITHUB_OUTPUT
+          echo "image_version=$RESOLVED_VERSION" >> $GITHUB_OUTPUT
+
+      # Detect last existing VM suffix automatically from current spoke RG
+      - name: Resolve last existing suffix
+        id: resolve-last-suffix
+        run: |
+          PREFIX="${{ env.DEMO_VM_PREFIX }}"
+          RG='${{ vars.SPOKE_RG_NAME }}'
+          LAST=0
+
+          RG_EXISTS=$(az group exists --name "$RG")
+          if [ "$RG_EXISTS" = "true" ]; then
+            VM_NAMES=$(az vm list --resource-group "$RG" --query "[].name" -o tsv)
+            while IFS= read -r NAME; do
+              if [[ "$NAME" =~ ^${PREFIX}-([0-9]+)$ ]]; then
+                NUM=$((10#${BASH_REMATCH[1]}))
+                if [ "$NUM" -gt "$LAST" ]; then
+                  LAST=$NUM
+                fi
+              fi
+            done <<< "$VM_NAMES"
+          fi
+
+          echo "Detected last existing suffix: $LAST"
+          echo "value=$LAST" >> $GITHUB_OUTPUT
+
+      # Build JSON matrix e.g. {"index":["01","02","03"]}
+      - name: Build VM index matrix
+        id: build-matrix
+        run: |
+          LAST=${{ steps.resolve-last-suffix.outputs.value }}
+          START=$((LAST + 1))
+          COUNT=${{ inputs.vm_count }}
+          END=$((START + COUNT - 1))
+          INDICES=$(seq -w $START $END | jq -Rsc '[split("\n")[] | select(. != "")]')
+          echo "matrix={\"index\":$INDICES}" >> $GITHUB_OUTPUT
+          echo "start_index=$START" >> $GITHUB_OUTPUT
+          echo "Will deploy VMs with indices: $(seq -w $START $END | tr '\n' ' ')"
+
+      # Generate fresh AVD registration token (valid 4 hours)
+      - name: Generate fresh AVD registration token
+        id: get-token
+        run: |
+          EXPIRY=$(date -u -d '+4 hours' '+%Y-%m-%dT%H:%M:%SZ')
+          az desktopvirtualization hostpool update \
+            --name "${{ steps.set-vars.outputs.host_pool_name }}" \
+            --resource-group "${{ steps.set-vars.outputs.hub_rg }}" \
+            --registration-info expirationTime="$EXPIRY" registrationTokenOperation=Update
+
+          TOKEN=$(az desktopvirtualization hostpool retrieve-registration-token \
+            --name "${{ steps.set-vars.outputs.host_pool_name }}" \
+            --resource-group "${{ steps.set-vars.outputs.hub_rg }}" \
+            --query token -o tsv)
+
+          echo "token=$TOKEN" >> $GITHUB_OUTPUT
+          echo "✅ Registration token generated (expires $EXPIRY)"
+
+  # ─────────────────────────────────────────────────────────
+  # JOB 2: Deploy — parallel VM deployment via matrix
+  # ─────────────────────────────────────────────────────────
+  deploy:
+    name: Deploy VM — avd-demo-${{ matrix.index }}
+    runs-on: ubuntu-latest
+    needs: setup
+    environment: ${{ inputs.environment }}
+    strategy:
+      matrix: ${{ fromJson(needs.setup.outputs.matrix) }}
+      fail-fast: false   # Continue deploying other VMs if one fails
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Azure Login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Deploy VM — avd-demo-${{ matrix.index }}
+        run: |
+          VM_NAME="${{ env.DEMO_VM_PREFIX }}-${{ matrix.index }}"
+
+          az deployment group create \
+            --name "vm-${VM_NAME}-${{ github.run_id }}" \
+            --resource-group "${{ vars.SPOKE_RG_NAME }}" \
+            --template-file platform/spoke/vm.bicep \
+            --parameters \
+              location=${{ vars.LOCATION }} \
+              vmName="$VM_NAME" \
+              adminUsername=azureadmin \
+              adminPassword="${{ secrets.AVD_VM_ADMIN_PASSWORD }}" \
+              subnetId="${{ vars.SUBNET_ID }}" \
+              hostPoolName="${{ needs.setup.outputs.host_pool_name }}" \
+              registrationToken="${{ needs.setup.outputs.registration_token }}" \
+              imageSource="gallery" \
+              galleryImageId="${{ needs.setup.outputs.image_id }}"
+
+          echo "✅ VM $VM_NAME deployed and registered to ${{ needs.setup.outputs.host_pool_name }}"
+
+  # ─────────────────────────────────────────────────────────
+  # JOB 3: Summary
+  # ─────────────────────────────────────────────────────────
+  summary:
+    name: Deployment Summary
+    runs-on: ubuntu-latest
+    needs: [setup, deploy]
+    if: always()
+    steps:
+      - name: Write summary
+        run: |
+          echo "## 💻 Session Host Deployment Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Property | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|---|---|" >> $GITHUB_STEP_SUMMARY
+          echo "| Environment | ${{ inputs.environment }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Host Pool | ${{ needs.setup.outputs.host_pool_name }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| VM Prefix | ${{ env.DEMO_VM_PREFIX }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| VMs Requested | ${{ inputs.vm_count }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Last Existing Suffix | ${{ needs.setup.outputs.last_existing_suffix }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Start Index | ${{ needs.setup.outputs.effective_start_index }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Image Source | Gallery (Golden Image) |" >> $GITHUB_STEP_SUMMARY
+          echo "| Image Definition | ${{ needs.setup.outputs.image_definition }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Image Version | ${{ needs.setup.outputs.image_version }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Status | ${{ needs.deploy.result }} |" >> $GITHUB_STEP_SUMMARY

@@ -1,0 +1,94 @@
+# ============================================================
+# ADMIN WORKFLOW — Rotate AVD Host Pool Registration Token
+#
+# Who runs this: Platform admins only
+# When:
+#   - Manually before any session host deployment
+#   - Automatically every Sunday at 4am (weekly rotation)
+#   - Registration tokens expire after max 30 days; rotating weekly is best practice
+#
+# What it does:
+#   1. Generates new 48-hour registration token for demo pool
+#   2. Stores token securely in Azure Key Vault
+#   3. Outputs which pool was rotated (token value is masked)
+#
+# Required GitHub Secrets:
+#   AZURE_CLIENT_ID, AZURE_TENANT_ID, AZURE_SUBSCRIPTION_ID
+#
+# Required GitHub Environment variables:
+#   HOST_POOL_NAME, HUB_RG_NAME, KEY_VAULT_NAME
+# ============================================================
+
+name: 🔑 Rotate Registration Token
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Target environment'
+        required: true
+        default: 'dev'
+        type: choice
+        options:
+          - dev
+          - prod
+
+  # Rotate weekly every Sunday at 04:00 UTC
+  schedule:
+    - cron: '0 4 * * 0'
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  rotate:
+    name: Rotate Demo Host Pool Token
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment || 'dev' }}
+
+    steps:
+      - name: Azure Login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Rotate demo host pool token
+        run: |
+          POOL="${{ vars.HOST_POOL_NAME }}"
+          RG="${{ vars.HUB_RG_NAME }}"
+          EXPIRY=$(date -u -d '+48 hours' '+%Y-%m-%dT%H:%M:%SZ')
+
+          az desktopvirtualization hostpool update \
+            --name "$POOL" \
+            --resource-group "$RG" \
+            --registration-info expirationTime="$EXPIRY" registrationTokenOperation=Update
+
+          TOKEN=$(az desktopvirtualization hostpool retrieve-registration-token \
+            --name "$POOL" \
+            --resource-group "$RG" \
+            --query token -o tsv)
+
+          # Store in Key Vault — secret name: avd-reg-token-demo
+          az keyvault secret set \
+            --vault-name "${{ vars.KEY_VAULT_NAME }}" \
+            --name "avd-reg-token-demo" \
+            --value "$TOKEN" \
+            --expires "$(date -u -d '+48 hours' '+%Y-%m-%dT%H:%M:%SZ')"
+
+          echo "✅ Demo pool token rotated and stored in Key Vault (expires $EXPIRY)"
+          echo "  Pool: $POOL"
+          echo "  Key Vault secret: avd-reg-token-demo"
+
+      - name: Rotation Summary
+        run: |
+          echo "## 🔑 Token Rotation Complete" >> $GITHUB_STEP_SUMMARY
+          echo "| Property | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|---|---|" >> $GITHUB_STEP_SUMMARY
+          echo "| Host Pool | ${{ vars.HOST_POOL_NAME }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Environment | ${{ inputs.environment || 'dev (scheduled)' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Token validity | 48 hours |" >> $GITHUB_STEP_SUMMARY
+          echo "| Stored in | Key Vault: ${{ vars.KEY_VAULT_NAME }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Triggered by | ${{ github.event_name }} |" >> $GITHUB_STEP_SUMMARY

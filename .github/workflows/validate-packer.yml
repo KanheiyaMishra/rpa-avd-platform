@@ -1,0 +1,66 @@
+# ============================================================
+# PR WORKFLOW — Validate Packer Template
+#
+# Purpose:
+#   Fast guardrail for pull requests that change image build artifacts.
+#   Runs packer init + fmt check + validate with placeholder vars.
+#
+# Notes:
+#   - Does NOT build images
+#   - Does NOT require Azure login or repository secrets
+# ============================================================
+
+name: ✅ Validate Packer Template
+
+on:
+  pull_request:
+    paths:
+      - 'packer/**'
+      - 'platform/images/install-demo.ps1'
+      - '.github/workflows/build-golden-image.yml'
+      - '.github/workflows/validate-packer.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate-packer:
+    name: Packer Init / Fmt / Validate
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Packer
+        uses: hashicorp/setup-packer@v3
+
+      - name: Packer version
+        run: packer version
+
+      - name: Packer init
+        run: |
+          cd packer
+          packer init demo-image.pkr.hcl
+
+      - name: Packer fmt check
+        run: |
+          cd packer
+          packer fmt -check demo-image.pkr.hcl
+
+      - name: Packer validate
+        env:
+          PKR_VAR_subscription_id: 00000000-0000-0000-0000-000000000000
+          PKR_VAR_tenant_id: 00000000-0000-0000-0000-000000000000
+          PKR_VAR_client_id: 00000000-0000-0000-0000-000000000000
+          PKR_VAR_location: eastus2
+          PKR_VAR_hub_resource_group: rg-avd-hub-hp-demo
+          PKR_VAR_gallery_name: acg_avd_dev
+          PKR_VAR_image_definition_name: img-def-demo
+          PKR_VAR_image_version: 1.0.0
+          PKR_VAR_build_vm_admin_username: packeradmin
+          PKR_VAR_build_vm_admin_password: DummyPassw0rd!
+        run: |
+          cd packer
+          packer validate demo-image.pkr.hcl

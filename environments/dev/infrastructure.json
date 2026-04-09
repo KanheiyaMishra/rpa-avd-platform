@@ -1,0 +1,77 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#",
+  "contentVersion": "1.0.0.0",
+  "metadata": {
+    "description": "Infrastructure deployment parameters for AVD platform (dev environment)",
+    "environment": "dev",
+    "region": "eastus2",
+    "lastUpdated": "2026-04-10"
+  },
+  "parameters": {
+    "location": {
+      "value": "eastus2",
+      "metadata": {
+        "description": "Azure region for all resources"
+      }
+    },
+    "hostPoolName": {
+      "value": "hp-demo",
+      "metadata": {
+        "description": "AVD Host Pool name (pooled, depth-first)"
+      }
+    },
+    "workspaceName": {
+      "value": "ws-demo",
+      "metadata": {
+        "description": "AVD Workspace name"
+      }
+    },
+    "galleryName": {
+      "value": "acg_avd_dev",
+      "metadata": {
+        "description": "Azure Compute Gallery name for golden images"
+      }
+    },
+    "spokeResourceGroupName": {
+      "value": "rg-avd-spoke-demo",
+      "metadata": {
+        "description": "Spoke resource group for session hosts"
+      }
+    },
+    "hubResourceGroupName": {
+      "value": "rg-avd-hub-hp-demo",
+      "metadata": {
+        "description": "Hub resource group (derived from HOST_POOL_NAME)"
+      }
+    },
+    "loadBalancerType": {
+      "value": "DepthFirst",
+      "metadata": {
+        "description": "Load balancing algorithm: DepthFirst (fill VMs sequentially) or BreadthFirst"
+      }
+    },
+    "hostPoolType": {
+      "value": "Pooled",
+      "metadata": {
+        "description": "Host pool type: Pooled (shared) or Personal"
+      }
+    },
+    "preferredAppGroupType": {
+      "value": "Desktop",
+      "metadata": {
+        "description": "App group type: Desktop (full desktop) or RailApplications (RemoteApp)"
+      }
+    },
+    "tags": {
+      "value": {
+        "environment": "dev",
+        "project": "avd-platform",
+        "managedBy": "terraform",
+        "costCenter": "engineering"
+      },
+      "metadata": {
+        "description": "Common tags for cost tracking and organization"
+      }
+    }
+  }
+}
