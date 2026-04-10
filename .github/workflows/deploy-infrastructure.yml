@@ -1,6 +1,6 @@
 # ============================================================
 # ADMIN WORKFLOW — Deploy Full AVD Platform Infrastructure
-# Scope: Hub RG + AVD Resources + Gallery + Spoke RG + Association
+# Scope: Network (VNet, Subnet, NSG, Route Table) + Hub RG + AVD Resources + Gallery + Spoke RG + Association
 #
 # Who runs this: Platform/Infrastructure admins only
 # When: First-time setup or infrastructure changes
@@ -17,6 +17,9 @@
 #   WORKSPACE_NAME         - AVD workspace name (e.g. ws-demo)
 #   GALLERY_NAME           - Compute gallery name (e.g. acg_avd_dev)
 #   SPOKE_RG_NAME          - Spoke resource group name (e.g. rg-avd-spoke-demo)
+#   VNET_NAME              - Virtual network name (e.g. vnet-avd-demo)
+#   SUBNET_NAME            - Subnet name (e.g. avd-subnet)
+#   NSG_NAME               - Network security group name (e.g. avd-nsg)
 # ============================================================
 
 name: 🏗️ Deploy AVD Infrastructure
@@ -71,6 +74,9 @@ jobs:
       - name: Lint — spoke/rg.bicep
         run: az bicep build --file platform/spoke/rg.bicep
 
+      - name: Lint — network/vnet.bicep
+        run: az bicep build --file platform/network/vnet.bicep
+
   what-if:
     name: What-If Preview
     runs-on: ubuntu-latest
@@ -103,6 +109,16 @@ jobs:
             --parameters location=${{ vars.LOCATION }} \
                          resourceGroupName=${{ vars.SPOKE_RG_NAME }}
 
+      - name: What-If — Network Infrastructure
+        run: |
+          az deployment group what-if \
+            --resource-group ${{ vars.SPOKE_RG_NAME }} \
+            --template-file platform/network/vnet.bicep \
+            --parameters location=${{ vars.LOCATION }} \
+                         vnetName=${{ vars.VNET_NAME }} \
+                         subnetName=${{ vars.SUBNET_NAME }} \
+                         nsgName=${{ vars.NSG_NAME }}
+
   deploy:
     name: Deploy Infrastructure
     runs-on: ubuntu-latest
@@ -119,7 +135,38 @@ jobs:
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
-      # Step 1: Hub Resource Group
+      # Step 1: Spoke Resource Group (needed first for network)
+      - name: Deploy Spoke Resource Group
+        run: |
+          az deployment sub create \
+            --name "spoke-rg-${{ github.run_id }}" \
+            --location ${{ vars.LOCATION }} \
+            --template-file platform/spoke/rg.bicep \
+            --parameters location=${{ vars.LOCATION }} \
+                         resourceGroupName=${{ vars.SPOKE_RG_NAME }}
+
+      # Step 2: Network Infrastructure (VNet, Subnet, NSG, Route Table)
+      - name: Deploy Network Infrastructure
+        run: |
+          az deployment group create \
+            --name "network-${{ github.run_id }}" \
+            --resource-group ${{ vars.SPOKE_RG_NAME }} \
+            --template-file platform/network/vnet.bicep \
+            --parameters location=${{ vars.LOCATION }} \
+                         vnetName=${{ vars.VNET_NAME }} \
+                         subnetName=${{ vars.SUBNET_NAME }} \
+                         nsgName=${{ vars.NSG_NAME }}
+
+      - name: Set Subnet ID
+        id: network
+        run: |
+          SUBNET_ID=$(az deployment group show \
+            --name "network-${{ github.run_id }}" \
+            --resource-group ${{ vars.SPOKE_RG_NAME }} \
+            --query properties.outputs.subnetId.value -o tsv)
+          echo "subnet_id=$SUBNET_ID" >> $GITHUB_OUTPUT
+
+      # Step 3: Hub Resource Group
       - name: Deploy Hub Resource Group
         run: |
           az deployment sub create \
@@ -137,7 +184,7 @@ jobs:
             --query properties.outputs.rgName.value -o tsv)
           echo "name=$RG_NAME" >> $GITHUB_OUTPUT
 
-      # Step 2: Azure Compute Gallery
+      # Step 4: Azure Compute Gallery
       - name: Deploy Azure Compute Gallery + Image Definitions
         run: |
           az deployment group create \
@@ -147,7 +194,7 @@ jobs:
             --parameters location=${{ vars.LOCATION }} \
                          galleryName=${{ vars.GALLERY_NAME }}
 
-      # Step 3: AVD Resources (Host Pools, Workspace, App Groups)
+      # Step 5: AVD Resources (Host Pools, Workspace, App Groups)
       - name: Deploy AVD Resources
         run: |
           az deployment group create \
@@ -158,17 +205,7 @@ jobs:
                          hostPoolName=${{ vars.HOST_POOL_NAME }} \
                          workspaceName=${{ vars.WORKSPACE_NAME }}
 
-      # Step 4: Spoke Resource Group
-      - name: Deploy Spoke Resource Group
-        run: |
-          az deployment sub create \
-            --name "spoke-rg-${{ github.run_id }}" \
-            --location ${{ vars.LOCATION }} \
-            --template-file platform/spoke/rg.bicep \
-            --parameters location=${{ vars.LOCATION }} \
-                         resourceGroupName=${{ vars.SPOKE_RG_NAME }}
-
-      # Step 5: Associate App Group → Workspace
+      # Step 6: Associate App Group → Workspace
       - name: Associate App Group to Workspace
         run: |
           az deployment group create \

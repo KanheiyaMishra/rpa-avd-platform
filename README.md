@@ -142,7 +142,9 @@ WORKSPACE_NAME         = ws-demo                    # Workspace name
 GALLERY_NAME           = acg_avd_dev                # Compute gallery name
 SPOKE_RG_NAME          = rg-avd-spoke-demo         # Session host RG name
 HUB_RG_NAME            = rg-avd-hub-hp-demo        # Hub RG name (derived from HOST_POOL_NAME)
-SUBNET_ID              = /subscriptions/.../subnets/subnet-name  # Target subnet for VMs
+VNET_NAME              = vnet-avd-demo             # Virtual network name
+SUBNET_NAME            = avd-subnet                # Subnet name
+NSG_NAME               = avd-nsg                    # Network security group name
 KEY_VAULT_NAME         = kvd-avd-demo              # For registration token storage (optional)
 ```
 

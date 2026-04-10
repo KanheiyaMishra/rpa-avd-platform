@@ -44,6 +44,36 @@
         "description": "Hub resource group (derived from HOST_POOL_NAME)"
       }
     },
+    "vnetName": {
+      "value": "vnet-avd-demo",
+      "metadata": {
+        "description": "Virtual network name for AVD infrastructure"
+      }
+    },
+    "subnetName": {
+      "value": "avd-subnet",
+      "metadata": {
+        "description": "Subnet name for session host VMs"
+      }
+    },
+    "nsgName": {
+      "value": "avd-nsg",
+      "metadata": {
+        "description": "Network security group name for subnet security rules"
+      }
+    },
+    "vnetAddressPrefix": {
+      "value": "10.0.0.0/16",
+      "metadata": {
+        "description": "Address space for the virtual network"
+      }
+    },
+    "subnetAddressPrefix": {
+      "value": "10.0.1.0/24",
+      "metadata": {
+        "description": "Address space for the subnet (must be within VNet address space)"
+      }
+    },
     "loadBalancerType": {
       "value": "DepthFirst",
       "metadata": {

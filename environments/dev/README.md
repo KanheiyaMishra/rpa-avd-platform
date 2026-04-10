@@ -36,7 +36,9 @@ This folder contains parameter reference files for the AVD platform development 
    GALLERY_NAME=acg_avd_dev
    SPOKE_RG_NAME=rg-avd-spoke-demo
    HUB_RG_NAME=rg-avd-hub-hp-demo
-   SUBNET_ID=/subscriptions/...
+   VNET_NAME=vnet-avd-demo
+   SUBNET_NAME=avd-subnet
+   NSG_NAME=avd-nsg
    KEY_VAULT_NAME=kvd-avd-demo
    ```
 

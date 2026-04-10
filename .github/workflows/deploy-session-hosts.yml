@@ -1,14 +1,15 @@
 # ============================================================
 # ADMIN + USER WORKFLOW — Deploy AVD Session Hosts (VMs)
 #
-# Who runs this: 
+# Who runs this:
 #   - Admins: full control over all inputs
 #   - Users (self-service): limited inputs via GitHub Environment approval
 #
 # What it does:
 #   1. Generates a fresh AVD registration token (valid 4h)
-#   2. Deploys N VMs IN PARALLEL using a dynamic matrix
-#   3. Each VM is registered to the demo host pool automatically
+#   2. Resolves subnet ID from deployed network infrastructure
+#   3. Deploys N VMs IN PARALLEL using a dynamic matrix
+#   4. Each VM is registered to the demo host pool automatically
 #
 # Required GitHub Secrets:
 #   AZURE_CLIENT_ID, AZURE_TENANT_ID, AZURE_SUBSCRIPTION_ID
@@ -16,8 +17,9 @@
 #
 # Required GitHub Environment variables:
 #   LOCATION, HOST_POOL_NAME, SPOKE_RG_NAME, GALLERY_NAME
-#   HUB_RG_NAME            - Hub resource group name
-#   AZURE_SUBSCRIPTION_ID  - Subscription (also as env var for az commands)
+#   VNET_NAME, SUBNET_NAME  - Network infrastructure names
+#   HUB_RG_NAME             - Hub resource group name
+#   AZURE_SUBSCRIPTION_ID   - Subscription (also as env var for az commands)
 # ============================================================
 
 name: 💻 Deploy Session Hosts
@@ -69,6 +71,7 @@ jobs:
       image_id: ${{ steps.resolve-image.outputs.image_id }}
       image_definition: ${{ steps.resolve-image.outputs.image_def }}
       image_version: ${{ steps.resolve-image.outputs.image_version }}
+      subnet_id: ${{ steps.resolve-subnet.outputs.subnet_id }}
       last_existing_suffix: ${{ steps.resolve-last-suffix.outputs.value }}
       effective_start_index: ${{ steps.build-matrix.outputs.start_index }}
 
@@ -140,6 +143,28 @@ jobs:
           echo "image_id=$IMAGE_ID" >> $GITHUB_OUTPUT
           echo "image_def=$IMAGE_DEF" >> $GITHUB_OUTPUT
           echo "image_version=$RESOLVED_VERSION" >> $GITHUB_OUTPUT
+
+      - name: Resolve subnet ID from deployed infrastructure
+        id: resolve-subnet
+        run: |
+          RG='${{ vars.SPOKE_RG_NAME }}'
+          VNET_NAME='${{ vars.VNET_NAME }}'
+          SUBNET_NAME='${{ vars.SUBNET_NAME }}'
+
+          SUBNET_ID=$(az network vnet subnet show \
+            --resource-group "$RG" \
+            --vnet-name "$VNET_NAME" \
+            --name "$SUBNET_NAME" \
+            --query "id" -o tsv 2>/dev/null || echo "")
+
+          if [ -z "$SUBNET_ID" ]; then
+            echo "❌ Subnet not found. RG: $RG, VNet: $VNET_NAME, Subnet: $SUBNET_NAME"
+            echo "Make sure infrastructure has been deployed first."
+            exit 1
+          fi
+
+          echo "subnet_id=$SUBNET_ID" >> $GITHUB_OUTPUT
+          echo "✅ Resolved subnet ID: $SUBNET_ID"
 
       # Detect last existing VM suffix automatically from current spoke RG
       - name: Resolve last existing suffix
@@ -231,7 +256,7 @@ jobs:
               vmName="$VM_NAME" \
               adminUsername=azureadmin \
               adminPassword="${{ secrets.AVD_VM_ADMIN_PASSWORD }}" \
-              subnetId="${{ vars.SUBNET_ID }}" \
+              subnetId="${{ needs.setup.outputs.subnet_id }}" \
               hostPoolName="${{ needs.setup.outputs.host_pool_name }}" \
               registrationToken="${{ needs.setup.outputs.registration_token }}" \
               imageSource="gallery" \
