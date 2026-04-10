@@ -73,33 +73,6 @@ resource nsg 'Microsoft.Network/networkSecurityGroups@2023-09-01' = {
   }
 }
 
-// Virtual Network
-resource vnet 'Microsoft.Network/virtualNetworks@2023-09-01' = {
-  name: vnetName
-  location: location
-  properties: {
-    addressSpace: {
-      addressPrefixes: [
-        vnetAddressPrefix
-      ]
-    }
-    subnets: [
-      {
-        name: subnetName
-        properties: {
-          addressPrefix: subnetAddressPrefix
-          networkSecurityGroup: {
-            id: nsg.id
-          }
-        }
-      }
-    ]
-  }
-  dependsOn: [
-    nsg
-  ]
-}
-
 // Route Table (optional - for custom routing if needed)
 resource routeTable 'Microsoft.Network/routeTables@2023-09-01' = {
   name: '${vnetName}-rt'
@@ -118,18 +91,31 @@ resource routeTable 'Microsoft.Network/routeTables@2023-09-01' = {
   }
 }
 
-// Associate route table with subnet (optional)
-resource subnetRouteTable 'Microsoft.Network/virtualNetworks/subnets@2023-09-01' = {
-  parent: vnet
-  name: subnetName
+// Virtual Network
+resource vnet 'Microsoft.Network/virtualNetworks@2023-09-01' = {
+  name: vnetName
+  location: location
   properties: {
-    routeTable: {
-      id: routeTable.id
+    addressSpace: {
+      addressPrefixes: [
+        vnetAddressPrefix
+      ]
     }
+    subnets: [
+      {
+        name: subnetName
+        properties: {
+          addressPrefix: subnetAddressPrefix
+          networkSecurityGroup: {
+            id: nsg.id
+          }
+          routeTable: {
+            id: routeTable.id
+          }
+        }
+      }
+    ]
   }
-  dependsOn: [
-    routeTable
-  ]
 }
 
 output vnetId string = vnet.id
