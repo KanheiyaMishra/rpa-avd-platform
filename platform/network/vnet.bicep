@@ -51,7 +51,7 @@ resource nsg 'Microsoft.Network/networkSecurityGroups@2023-09-01' = {
           destinationAddressPrefix: 'Internet'
           destinationPortRange: '80'
         }
-      },,
+      },
       {
         name: 'AllowDNS'
         properties: {
