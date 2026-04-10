@@ -71,7 +71,7 @@ resource nsg 'Microsoft.Network/networkSecurityGroups@2023-09-01' = {
 
 // Route Table
 resource routeTable 'Microsoft.Network/routeTables@2023-09-01' = {
-  name: '${vnetName}-rt'
+  name: concat(vnetName, '-rt')
   location: location
   properties: {
     routes: [
@@ -114,7 +114,7 @@ resource vnet 'Microsoft.Network/virtualNetworks@2023-09-01' = {
 }
 
 output vnetId string = vnet.id
-output subnetId string = '${vnet.id}/subnets/${subnetName}'
+output subnetId string = concat(vnet.id, '/subnets/', subnetName)
 output nsgId string = nsg.id
 output routeTableId string = routeTable.id</content>
 <parameter name="filePath">c:\github kanheiya\rpa-avd-platform\platform\network\vnet.bicep
