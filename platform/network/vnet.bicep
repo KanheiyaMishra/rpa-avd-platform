@@ -13,7 +13,6 @@ resource nsg 'Microsoft.Network/networkSecurityGroups@2023-09-01' = {
   location: location
   properties: {
     securityRules: [
-      // RDP access (for admin/troubleshooting)
       {
         name: 'AllowRDP'
         properties: {
@@ -27,7 +26,6 @@ resource nsg 'Microsoft.Network/networkSecurityGroups@2023-09-01' = {
           destinationPortRange: '3389'
         }
       },
-      // HTTPS (for Windows updates, etc.)
       {
         name: 'AllowHTTPS'
         properties: {
@@ -41,7 +39,6 @@ resource nsg 'Microsoft.Network/networkSecurityGroups@2023-09-01' = {
           destinationPortRange: '443'
         }
       },
-      // HTTP (for Windows updates, etc.)
       {
         name: 'AllowHTTP'
         properties: {
@@ -55,7 +52,6 @@ resource nsg 'Microsoft.Network/networkSecurityGroups@2023-09-01' = {
           destinationPortRange: '80'
         }
       },
-      // DNS
       {
         name: 'AllowDNS'
         properties: {
@@ -73,13 +69,12 @@ resource nsg 'Microsoft.Network/networkSecurityGroups@2023-09-01' = {
   }
 }
 
-// Route Table (optional - for custom routing if needed)
+// Route Table
 resource routeTable 'Microsoft.Network/routeTables@2023-09-01' = {
   name: '${vnetName}-rt'
   location: location
   properties: {
     routes: [
-      // Default route to internet
       {
         name: 'DefaultRoute'
         properties: {
