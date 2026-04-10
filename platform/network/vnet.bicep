@@ -25,7 +25,7 @@ resource nsg 'Microsoft.Network/networkSecurityGroups@2023-09-01' = {
           destinationAddressPrefix: '*'
           destinationPortRange: '3389'
         }
-      },
+      }
       {
         name: 'AllowHTTPS'
         properties: {
@@ -38,7 +38,7 @@ resource nsg 'Microsoft.Network/networkSecurityGroups@2023-09-01' = {
           destinationAddressPrefix: 'Internet'
           destinationPortRange: '443'
         }
-      },
+      }
       {
         name: 'AllowHTTP'
         properties: {
@@ -51,7 +51,7 @@ resource nsg 'Microsoft.Network/networkSecurityGroups@2023-09-01' = {
           destinationAddressPrefix: 'Internet'
           destinationPortRange: '80'
         }
-      },
+      }
       {
         name: 'AllowDNS'
         properties: {
