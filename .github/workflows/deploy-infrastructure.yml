@@ -122,7 +122,6 @@ jobs:
   deploy:
     name: Deploy Infrastructure
     runs-on: ubuntu-latest
-    needs: validate
     if: inputs.what_if == false
     environment: ${{ inputs.environment }}  # <-- GitHub Environment approval gate here
     steps:
