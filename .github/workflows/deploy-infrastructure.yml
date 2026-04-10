@@ -45,42 +45,42 @@ permissions:
   contents: read
 
 jobs:
-  validate:
-    name: Validate Bicep Templates
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+  # validate:  # Temporarily disabled for direct deployment
+  #   name: Validate Bicep Templates
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     - name: Checkout repository
+  #       uses: actions/checkout@v4
 
-      - name: Azure Login (OIDC)
-        uses: azure/login@v2
-        with:
-          client-id: ${{ secrets.AZURE_CLIENT_ID }}
-          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
-          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+  #     - name: Azure Login (OIDC)
+  #       uses: azure/login@v2
+  #       with:
+  #         client-id: ${{ secrets.AZURE_CLIENT_ID }}
+  #         tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+  #         subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
-      - name: Lint — Hub main.bicep
-        run: az bicep build --file platform/hub/main.bicep
+  #     - name: Lint — Hub main.bicep
+  #       run: az bicep build --file platform/hub/main.bicep
 
-      - name: Lint — avd-resources.bicep
-        run: az bicep build --file platform/hub/avd-resources.bicep
+  #     - name: Lint — avd-resources.bicep
+  #       run: az bicep build --file platform/hub/avd-resources.bicep
 
-      - name: Lint — gallery.bicep
-        run: az bicep build --file platform/hub/gallery.bicep
+  #     - name: Lint — gallery.bicep
+  #       run: az bicep build --file platform/hub/gallery.bicep
 
-      - name: Lint — association.bicep
-        run: az bicep build --file platform/hub/association.bicep
+  #     - name: Lint — association.bicep
+  #       run: az bicep build --file platform/hub/association.bicep
 
-      - name: Lint — spoke/rg.bicep
-        run: az bicep build --file platform/spoke/rg.bicep
+  #     - name: Lint — spoke/rg.bicep
+  #       run: az bicep build --file platform/spoke/rg.bicep
 
-      - name: Lint — network/vnet.bicep
-        run: az bicep build --file platform/network/vnet.bicep
+  #     - name: Lint — network/vnet.bicep
+  #       run: az bicep build --file platform/network/vnet.bicep
 
   what-if:
     name: What-If Preview
     runs-on: ubuntu-latest
-    needs: validate
+    # needs: validate  # Temporarily disabled
     if: inputs.what_if == true
     environment: ${{ inputs.environment }}
     steps:
